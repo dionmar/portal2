@@ -1,0 +1,72 @@
+/* ===== Base que você já tinha (mantive) ===== */
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 8em;
+  padding: 0.2em; /* <- corrigido (antes estava 0,2em) */
+  will-change: filter;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card { padding: 2em; }
+.read-the-docs { color: #888; }
+
+/* ======= A partir daqui: novos estilos modernos ======= */
+
+/* Paleta e tokens (fácil de ajustar) */
+:root{
+  --bg: #0b1020;
+  --surface: #11162b;
+  --muted: #98a2b3;
+  --border: #1d2440;
+  --text: #e5e7eb;
+  --accent: #6cc9ff;
+  --accent-2: #8be7c1;
+  --danger: #ff647c;
+}
+
+/* Não força o fundo global pra não brigar com seu tema.
+   Se quiser dark total, descomente:
+   body { background: radial-gradient(1200px 800px at 20% -10%, #132042 0%, #0b1020 60%); color: var(--text); }
+*/
+
+/* Cabeçalho/hero */
+.header{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap: 12px;
+  padding: 0 0 8px;
+}
+.title{
+  margin: 8px 0 18px;
+  letter-spacing: .3px;
+}
+.hero-card{
+  max-width: 860px;
+  margin: 0 auto 18px;
+  padding: 18px 20px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
