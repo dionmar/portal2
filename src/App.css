@@ -70,3 +70,28 @@
   gap: 12px;
   align-items: center;
   justify-content: space-between;
+
+  /* --- Fix iPhone/Safari: tema claro e fundo branco --- */
+:root { 
+  color-scheme: light;          /* desabilita auto-dark */
+}
+
+html, body {
+  min-height: 100%;
+  background-color: #ffffff;    /* fundo branco real */
+  color: #212529;               /* texto escuro */
+}
+
+/* mantém claro mesmo quando o SO está em dark mode */
+@media (prefers-color-scheme: dark) {
+  html, body {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+  }
+}
+
+/* opcional: deixa o conteúdo central com fundo branco também */
+#root {
+  background: #ffffff;
+  border-radius: 12px;          /* se quiser manter o “cartão” */
+}
