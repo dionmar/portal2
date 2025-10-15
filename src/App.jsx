@@ -150,7 +150,7 @@ export default function App() {
         <h1 className="display-6">Portal de Automações</h1>
         <div className="card border-0 shadow-sm my-3">
           <div className="card-body d-flex flex-wrap align-items-center">
-            <p className="mb-0">Mais moderno, mais prático, mais ágil, <strong>data-driven</strong></p>
+            <p className="mb-0">+ moderno, + prático, + ágil, <strong>data-driven</strong></p>
 
           </div>
         </div>
