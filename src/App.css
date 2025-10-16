@@ -95,3 +95,19 @@ html, body {
   background: #ffffff;
   border-radius: 12px;          /* se quiser manter o “cartão” */
 }
+/* Botões "ghost" modernos (sem borda, com hover suave) */
+.btn-ghost-primary,
+.btn-ghost-danger {
+  border: 0 !important;
+  background: transparent;
+  box-shadow: none;
+  padding: 6px 10px;
+  border-radius: 10px;
+  transition: background-color .15s ease, transform .05s ease-in-out;
+}
+.btn-ghost-primary:hover { background: rgba(13,110,253,.12); }
+.btn-ghost-danger:hover  { background: rgba(220,53,69,.12); }
+.btn-ghost-primary:active,
+.btn-ghost-danger:active { transform: scale(0.98); }
+.btn-ghost-primary i     { color: #0d6efd; font-size: 1rem; }
+.btn-ghost-danger  i     { color: #dc3545; font-size: 1rem; }
