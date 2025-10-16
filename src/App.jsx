@@ -1,38 +1,114 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { generateClient } from 'aws-amplify/api'
 import './App.css'
+
+const client = generateClient()
+const gql = String.raw
+
+// ---------------- GraphQL (queries/mutações geradas pelo @model) ----------------
+const LIST_OFERTAS = gql`
+  query ListOfertas($limit: Int, $nextToken: String) {
+    listOfertas(limit: $limit, nextToken: $nextToken) {
+      items { id bsn nome tier status tipo comunidade criadoEm }
+      nextToken
+    }
+  }
+`
+const CREATE_OFERTA = gql`
+  mutation CreateOferta($input: CreateOfertaInput!) {
+    createOferta(input: $input) {
+      id bsn nome tier status tipo comunidade criadoEm
+    }
+  }
+`
+const UPDATE_OFERTA = gql`
+  mutation UpdateOferta($input: UpdateOfertaInput!) {
+    updateOferta(input: $input) {
+      id bsn nome tier status tipo comunidade criadoEm
+    }
+  }
+`
+const DELETE_OFERTA = gql`
+  mutation DeleteOferta($input: DeleteOfertaInput!) {
+    deleteOferta(input: $input) { id }
+  }
+`
+
+const LIST_AUTOMACAOS = gql`
+  query ListAutomacaos($limit: Int, $nextToken: String) {
+    listAutomacaos(limit: $limit, nextToken: $nextToken) {
+      items { id nome descricao categoria criadoEm ofertaId }
+      nextToken
+    }
+  }
+`
+const CREATE_AUTOMACAO = gql`
+  mutation CreateAutomacao($input: CreateAutomacaoInput!) {
+    createAutomacao(input: $input) {
+      id nome descricao categoria criadoEm ofertaId
+    }
+  }
+`
+const UPDATE_AUTOMACAO = gql`
+  mutation UpdateAutomacao($input: UpdateAutomacaoInput!) {
+    updateAutomacao(input: $input) {
+      id nome descricao categoria criadoEm ofertaId
+    }
+  }
+`
+const DELETE_AUTOMACAO = gql`
+  mutation DeleteAutomacao($input: DeleteAutomacaoInput!) {
+    deleteAutomacao(input: $input) { id }
+  }
+`
 
 export default function App() {
   /* ----------------- AUTOMAÇÕES ----------------- */
-  const [form, setForm] = useState({ nome: '', descricao: '', categoria: '', ofertaBusca: '' }) // ofertaBusca é o texto do combo
+  const [form, setForm] = useState({ nome: '', descricao: '', categoria: '', ofertaBusca: '' })
   const [editId, setEditId] = useState(null)
   const [automacoes, setAutomacoes] = useState([])
 
   /* ----------------- OFERTAS ----------------- */
   const [ofertaForm, setOfertaForm] = useState({
-    bsn: '',
-    nome: '',
-    tier: '',
-    status: '',
-    tipo: '',
-    comunidade: '',
+    bsn: '', nome: '', tier: '', status: '', tipo: '', comunidade: '',
   })
   const [ofertaEditId, setOfertaEditId] = useState(null)
   const [ofertas, setOfertas] = useState([])
 
-  /* ----------------- LOAD / SAVE ----------------- */
+  /* ----------------- LOAD (AppSync) ----------------- */
   useEffect(() => {
-    const a = localStorage.getItem('automacoes')
-    if (a) { try { setAutomacoes(JSON.parse(a)) } catch {} }
-    const o = localStorage.getItem('ofertas')
-    if (o) { try { setOfertas(JSON.parse(o)) } catch {} }
+    ;(async () => {
+      await Promise.all([loadOfertas(), loadAutomacoes()])
+    })()
   }, [])
 
-  useEffect(() => {
-    localStorage.setItem('automacoes', JSON.stringify(automacoes))
-  }, [automacoes])
-  useEffect(() => {
-    localStorage.setItem('ofertas', JSON.stringify(ofertas))
-  }, [ofertas])
+  async function loadOfertas() {
+    const acc = []
+    let nextToken = null
+    do {
+      const res = await client.graphql({ query: LIST_OFERTAS, variables: { limit: 100, nextToken } })
+      const { items, nextToken: nt } = res.data.listOfertas
+      acc.push(...items)
+      nextToken = nt
+    } while (nextToken)
+    // opcional: ordene por nome
+    acc.sort((a,b)=>a.nome.localeCompare(b.nome))
+    setOfertas(acc)
+  }
+
+  async function loadAutomacoes() {
+    const acc = []
+    let nextToken = null
+    do {
+      const res = await client.graphql({ query: LIST_AUTOMACAOS, variables: { limit: 100, nextToken } })
+      const { items, nextToken: nt } = res.data.listAutomacaos
+      acc.push(...items)
+      nextToken = nt
+    } while (nextToken)
+    // mais recente primeiro
+    acc.sort((a,b)=> new Date(b.criadoEm) - new Date(a.criadoEm))
+    setAutomacoes(acc)
+  }
 
   /* ----------------- AUTOMAÇÕES HANDLERS ----------------- */
   const isValidAuto = form.nome.trim() && form.descricao.trim() && form.categoria
@@ -42,7 +118,9 @@ export default function App() {
     setForm(prev => ({ ...prev, [name]: value }))
   }
 
-  // Resolve a oferta digitada no combo (por nome ou BSN)
+  function ofertaById(id) { return ofertas.find(o => o.id === id) }
+  function ofertaLabel(id) { const o = ofertaById(id); return o ? `${o.nome} (${o.bsn})` : '' }
+
   function resolveOfertaId(ofertaBusca) {
     const q = (ofertaBusca || '').trim().toLowerCase()
     if (!q) return ''
@@ -55,153 +133,155 @@ export default function App() {
     return found ? found.id : ''
   }
 
-  const handleAutoSubmit = (e) => {
+  async function handleAutoSubmit(e) {
     e.preventDefault()
     if (!isValidAuto) return
 
     const ofertaId = resolveOfertaId(form.ofertaBusca)
-
     if (form.ofertaBusca && !ofertaId) {
-      alert('Oferta associada não encontrada. Digite o nome ou o ID BSN exatamente como cadastrado ou deixe em branco.')
+      alert('Oferta associada não encontrada. Digite o Nome ou o ID BSN igual ao cadastrado ou deixe em branco.')
       return
     }
 
     if (editId) {
-      setAutomacoes(prev =>
-        prev.map(a =>
-          a.id === editId
-            ? {
-                ...a,
-                nome: form.nome.trim(),
-                descricao: form.descricao.trim(),
-                categoria: form.categoria,
-                ofertaId,
-              }
-            : a
-        )
-      )
+      // manter criadoEm existente
+      const current = automacoes.find(a => a.id === editId)
+      const res = await client.graphql({
+        query: UPDATE_AUTOMACAO,
+        variables: {
+          input: {
+            id: editId,
+            nome: form.nome.trim(),
+            descricao: form.descricao.trim(),
+            categoria: form.categoria,
+            ofertaId
+          }
+        }
+      })
+      const updated = res.data.updateAutomacao
+      setAutomacoes(prev => prev.map(a => a.id === editId ? { ...current, ...updated } : a))
       setEditId(null)
     } else {
-      const novo = {
-        id: crypto.randomUUID(),
-        nome: form.nome.trim(),
-        descricao: form.descricao.trim(),
-        categoria: form.categoria,
-        ofertaId,
-        criadoEm: new Date().toISOString(),
-      }
-      setAutomacoes(prev => [novo, ...prev])
+      const res = await client.graphql({
+        query: CREATE_AUTOMACAO,
+        variables: {
+          input: {
+            nome: form.nome.trim(),
+            descricao: form.descricao.trim(),
+            categoria: form.categoria,
+            ofertaId,
+            criadoEm: new Date().toISOString(),
+          }
+        }
+      })
+      const created = res.data.createAutomacao
+      setAutomacoes(prev => [created, ...prev])
     }
+
     setForm({ nome: '', descricao: '', categoria: '', ofertaBusca: '' })
   }
 
-  const handleAutoEdit = (item) => {
+  function handleAutoEdit(item) {
     const ofertaTexto = item.ofertaId ? ofertaLabel(item.ofertaId) : ''
     setEditId(item.id)
     setForm({
-      nome: item.nome,
-      descricao: item.descricao,
-      categoria: item.categoria,
-      ofertaBusca: ofertaTexto,
+      nome: item.nome, descricao: item.descricao, categoria: item.categoria, ofertaBusca: ofertaTexto
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleAutoCancel = () => {
-    setEditId(null)
-    setForm({ nome: '', descricao: '', categoria: '', ofertaBusca: '' })
-  }
-
-  const handleAutoDelete = (id) => {
+  async function handleAutoDelete(id) {
     if (!confirm('Confirma excluir esta automação?')) return
+    await client.graphql({ query: DELETE_AUTOMACAO, variables: { input: { id } } })
     setAutomacoes(prev => prev.filter(a => a.id !== id))
-    if (editId === id) handleAutoCancel()
+    if (editId === id) {
+      setEditId(null)
+      setForm({ nome: '', descricao: '', categoria: '', ofertaBusca: '' })
+    }
   }
 
   /* ----------------- OFERTAS HANDLERS ----------------- */
   const isValidOferta =
-    ofertaForm.bsn.trim() &&
-    ofertaForm.nome.trim() &&
-    ofertaForm.tier &&
-    ofertaForm.status &&
-    ofertaForm.tipo &&
-    ofertaForm.comunidade.trim()
+    ofertaForm.bsn.trim() && ofertaForm.nome.trim() &&
+    ofertaForm.tier && ofertaForm.status && ofertaForm.tipo && ofertaForm.comunidade.trim()
 
   const handleOfertaChange = (e) => {
     const { name, value } = e.target
     setOfertaForm(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleOfertaSubmit = (e) => {
+  async function handleOfertaSubmit(e) {
     e.preventDefault()
     if (!isValidOferta) return
 
-    // Não duplicar BSN
+    // Evita duplicar BSN
     const existsBsn = ofertas.some(o => o.bsn.trim().toLowerCase() === ofertaForm.bsn.trim().toLowerCase() && o.id !== ofertaEditId)
-    if (existsBsn) {
-      alert('Já existe uma oferta com esse ID BSN.')
-      return
-    }
+    if (existsBsn) { alert('Já existe uma oferta com esse ID BSN.'); return }
 
     if (ofertaEditId) {
-      setOfertas(prev =>
-        prev.map(o =>
-          o.id === ofertaEditId
-            ? {
-                ...o,
-                bsn: ofertaForm.bsn.trim(),
-                nome: ofertaForm.nome.trim(),
-                tier: ofertaForm.tier,
-                status: ofertaForm.status,
-                tipo: ofertaForm.tipo,
-                comunidade: ofertaForm.comunidade.trim(),
-              }
-            : o
-        )
-      )
+      const res = await client.graphql({
+        query: UPDATE_OFERTA,
+        variables: {
+          input: {
+            id: ofertaEditId,
+            bsn: ofertaForm.bsn.trim(),
+            nome: ofertaForm.nome.trim(),
+            tier: ofertaForm.tier,
+            status: ofertaForm.status,
+            tipo: ofertaForm.tipo,
+            comunidade: ofertaForm.comunidade.trim(),
+          }
+        }
+      })
+      const updated = res.data.updateOferta
+      setOfertas(prev => prev.map(o => o.id === ofertaEditId ? updated : o))
       setOfertaEditId(null)
     } else {
-      const novo = {
-        id: crypto.randomUUID(),
-        bsn: ofertaForm.bsn.trim(),
-        nome: ofertaForm.nome.trim(),
-        tier: ofertaForm.tier,
-        status: ofertaForm.status,
-        tipo: ofertaForm.tipo,
-        comunidade: ofertaForm.comunidade.trim(),
-        criadoEm: new Date().toISOString(),
-      }
-      setOfertas(prev => [novo, ...prev])
+      const res = await client.graphql({
+        query: CREATE_OFERTA,
+        variables: {
+          input: {
+            bsn: ofertaForm.bsn.trim(),
+            nome: ofertaForm.nome.trim(),
+            tier: ofertaForm.tier,
+            status: ofertaForm.status,
+            tipo: ofertaForm.tipo,
+            comunidade: ofertaForm.comunidade.trim(),
+            criadoEm: new Date().toISOString(),
+          }
+        }
+      })
+      const created = res.data.createOferta
+      setOfertas(prev => {
+        const list = [...prev, created].sort((a,b)=>a.nome.localeCompare(b.nome))
+        return list
+      })
     }
     setOfertaForm({ bsn: '', nome: '', tier: '', status: '', tipo: '', comunidade: '' })
   }
 
-  const handleOfertaEdit = (o) => {
+  function handleOfertaEdit(o) {
     setOfertaEditId(o.id)
     setOfertaForm({
-      bsn: o.bsn,
-      nome: o.nome,
-      tier: o.tier,
-      status: o.status,
-      tipo: o.tipo,
-      comunidade: o.comunidade,
+      bsn: o.bsn, nome: o.nome, tier: o.tier, status: o.status, tipo: o.tipo, comunidade: o.comunidade
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleOfertaCancel = () => {
-    setOfertaEditId(null)
-    setOfertaForm({ bsn: '', nome: '', tier: '', status: '', tipo: '', comunidade: '' })
-  }
-
-  const handleOfertaDelete = (id) => {
+  async function handleOfertaDelete(id) {
     if (!confirm('Confirma excluir esta oferta?')) return
-
-    // Se houver automações referenciando essa oferta, apenas desvincula
-    setAutomacoes(prev => prev.map(a => (a.ofertaId === id ? { ...a, ofertaId: '' } : a)))
+    // Desvincula automações que apontavam para ela
+    const affected = automacoes.filter(a => a.ofertaId === id)
+    for (const a of affected) {
+      await client.graphql({ query: UPDATE_AUTOMACAO, variables: { input: { id: a.id, ofertaId: null } } })
+    }
+    await client.graphql({ query: DELETE_OFERTA, variables: { input: { id } } })
     setOfertas(prev => prev.filter(o => o.id !== id))
-
-    if (ofertaEditId === id) handleOfertaCancel()
+    setAutomacoes(prev => prev.map(a => a.ofertaId === id ? { ...a, ofertaId: null } : a))
+    if (ofertaEditId === id) {
+      setOfertaEditId(null)
+      setOfertaForm({ bsn: '', nome: '', tier: '', status: '', tipo: '', comunidade: '' })
+    }
   }
 
   /* ----------------- CSV (AUTOMAÇÕES) ----------------- */
@@ -230,43 +310,43 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
-  /* ----------------- Import CSV (AUTOMAÇÕES) ----------------- */
   const fileInputRef = useRef(null)
   const handleImportClick = () => fileInputRef.current?.click()
 
-  const handleImportFile = (e) => {
+  async function handleImportFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const text = String(reader.result || '')
-        const rows = parseCSV(text) // [{Nome, Descricao, Categoria, Oferta? (nome ou BSN), CriadoEm?}]
+        const rows = parseCSV(text) // [{Nome, Descricao, Categoria, Oferta?(nome ou BSN), CriadoEm?}]
         if (!rows.length) return alert('CSV vazio ou inválido.')
 
-        const mapped = rows.map(r => {
+        const created = []
+        for (const r of rows) {
           const nome = (r.Nome ?? r.nome ?? '').trim()
           const descricao = (r.Descricao ?? r.descricao ?? '').trim()
           const categoria = (r.Categoria ?? r.categoria ?? '').trim()
           const ofertaBusca = (r.Oferta ?? r.oferta ?? '').trim()
           const criadoEm = (r.CriadoEm ?? r.criadoem ?? '').trim()
-
-          if (!nome || !descricao || !categoria) return null
+          if (!nome || !descricao || !categoria) continue
           const ofertaId = resolveOfertaId(ofertaBusca)
-
-          return {
-            id: crypto.randomUUID(),
-            nome,
-            descricao,
-            categoria,
-            ofertaId,
-            criadoEm: criadoEm || new Date().toISOString(),
-          }
-        }).filter(Boolean)
-
-        if (!mapped.length) return alert('Nenhuma linha válida encontrada.')
-        setAutomacoes(prev => [...mapped, ...prev])
-        alert(`Importadas ${mapped.length} automações com sucesso!`)
+          const res = await client.graphql({
+            query: CREATE_AUTOMACAO,
+            variables: {
+              input: {
+                nome, descricao, categoria,
+                ofertaId: ofertaId || null,
+                criadoEm: criadoEm || new Date().toISOString()
+              }
+            }
+          })
+          created.push(res.data.createAutomacao)
+        }
+        if (!created.length) return alert('Nenhuma linha válida encontrada.')
+        setAutomacoes(prev => [...created, ...prev].sort((a,b)=> new Date(b.criadoEm) - new Date(a.criadoEm)))
+        alert(`Importadas ${created.length} automações com sucesso!`)
       } catch (err) {
         console.error(err)
         alert('Falha ao importar CSV.')
@@ -275,15 +355,6 @@ export default function App() {
       }
     }
     reader.readAsText(file, 'utf-8')
-  }
-
-  /* ----------------- Helpers de oferta ----------------- */
-  function ofertaById(id) {
-    return ofertas.find(o => o.id === id)
-  }
-  function ofertaLabel(id) {
-    const o = ofertaById(id)
-    return o ? `${o.nome} (${o.bsn})` : ''
   }
 
   /* ----------------- UI ----------------- */
@@ -299,13 +370,7 @@ export default function App() {
               <button className="btn btn-warning" onClick={handleImportClick}>
                 <i className="bi bi-upload me-1" /> Importar automações (.csv)
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                hidden
-                onChange={handleImportFile}
-              />
+              <input ref={fileInputRef} type="file" accept=".csv" hidden onChange={handleImportFile} />
             </div>
           </div>
         </div>
@@ -323,46 +388,24 @@ export default function App() {
               <div className="row g-3">
                 <div className="col-md-4">
                   <div className="form-floating">
-                    <input
-                      id="bsn"
-                      name="bsn"
-                      type="text"
-                      className="form-control"
-                      placeholder="ID BSN"
-                      value={ofertaForm.bsn}
-                      onChange={handleOfertaChange}
-                      required
-                    />
+                    <input id="bsn" name="bsn" type="text" className="form-control"
+                      placeholder="ID BSN" value={ofertaForm.bsn} onChange={handleOfertaChange} required />
                     <label htmlFor="bsn">ID BSN da Oferta</label>
                   </div>
                 </div>
 
                 <div className="col-md-8">
                   <div className="form-floating">
-                    <input
-                      id="nomeOferta"
-                      name="nome"
-                      type="text"
-                      className="form-control"
-                      placeholder="Nome da Oferta"
-                      value={ofertaForm.nome}
-                      onChange={handleOfertaChange}
-                      required
-                    />
+                    <input id="nomeOferta" name="nome" type="text" className="form-control"
+                      placeholder="Nome da Oferta" value={ofertaForm.nome} onChange={handleOfertaChange} required />
                     <label htmlFor="nomeOferta">Nome da Oferta</label>
                   </div>
                 </div>
 
                 <div className="col-md-3">
                   <div className="form-floating">
-                    <select
-                      id="tier"
-                      name="tier"
-                      className="form-select"
-                      value={ofertaForm.tier}
-                      onChange={handleOfertaChange}
-                      required
-                    >
+                    <select id="tier" name="tier" className="form-select"
+                      value={ofertaForm.tier} onChange={handleOfertaChange} required>
                       <option value="" disabled>Selecione…</option>
                       <option value="Bronze">Bronze</option>
                       <option value="Silver">Silver</option>
@@ -374,14 +417,8 @@ export default function App() {
 
                 <div className="col-md-3">
                   <div className="form-floating">
-                    <select
-                      id="status"
-                      name="status"
-                      className="form-select"
-                      value={ofertaForm.status}
-                      onChange={handleOfertaChange}
-                      required
-                    >
+                    <select id="status" name="status" className="form-select"
+                      value={ofertaForm.status} onChange={handleOfertaChange} required>
                       <option value="" disabled>Selecione…</option>
                       <option value="Ativa">Ativa</option>
                       <option value="Em Análise">Em Análise</option>
@@ -393,14 +430,8 @@ export default function App() {
 
                 <div className="col-md-3">
                   <div className="form-floating">
-                    <select
-                      id="tipo"
-                      name="tipo"
-                      className="form-select"
-                      value={ofertaForm.tipo}
-                      onChange={handleOfertaChange}
-                      required
-                    >
+                    <select id="tipo" name="tipo" className="form-select"
+                      value={ofertaForm.tipo} onChange={handleOfertaChange} required>
                       <option value="" disabled>Selecione…</option>
                       <option value="Produto">Produto</option>
                       <option value="Serviço">Serviço</option>
@@ -413,16 +444,9 @@ export default function App() {
 
                 <div className="col-md-3">
                   <div className="form-floating">
-                    <input
-                      id="comunidade"
-                      name="comunidade"
-                      type="text"
-                      className="form-control"
-                      placeholder="Comunidade Responsável"
-                      value={ofertaForm.comunidade}
-                      onChange={handleOfertaChange}
-                      required
-                    />
+                    <input id="comunidade" name="comunidade" type="text" className="form-control"
+                      placeholder="Comunidade Responsável" value={ofertaForm.comunidade}
+                      onChange={handleOfertaChange} required />
                     <label htmlFor="comunidade">Comunidade Responsável</label>
                   </div>
                 </div>
@@ -432,15 +456,16 @@ export default function App() {
                     <i className="bi bi-save me-1" /> {ofertaEditId ? 'Salvar alterações' : 'Salvar'}
                   </button>
                   {ofertaEditId && (
-                    <button type="button" className="btn btn-outline-secondary" onClick={handleOfertaCancel}>
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => {
+                      setOfertaEditId(null)
+                      setOfertaForm({ bsn: '', nome: '', tier: '', status: '', tipo: '', comunidade: '' })
+                    }}>
                       <i className="bi bi-x-circle me-1" /> Cancelar edição
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className="btn btn-light border"
-                    onClick={() => setOfertaForm({ bsn: '', nome: '', tier: '', status: '', tipo: '', comunidade: '' })}
-                  >
+                  <button type="button" className="btn btn-light border" onClick={() =>
+                    setOfertaForm({ bsn: '', nome: '', tier: '', status: '', tipo: '', comunidade: '' })
+                  }>
                     <i className="bi bi-eraser me-1" /> Limpar
                   </button>
                 </div>
@@ -502,12 +527,7 @@ export default function App() {
           <div className="card-header bg-white d-flex align-items-center justify-content-between">
             <h2 className="h5 mb-0">{editId ? 'Editar Automação' : 'Cadastrar Automação'}</h2>
             <div className="d-flex gap-2">
-              <button
-                className="btn btn-outline-primary btn-sm"
-                onClick={exportCSV}
-                disabled={automacoes.length === 0}
-                type="button"
-              >
+              <button className="btn btn-outline-primary btn-sm" onClick={exportCSV} disabled={automacoes.length === 0} type="button">
                 <i className="bi bi-download me-1" /> Exportar CSV
               </button>
             </div>
@@ -518,30 +538,16 @@ export default function App() {
               <div className="row g-3">
                 <div className="col-md-6">
                   <div className="form-floating">
-                    <input
-                      id="nome"
-                      name="nome"
-                      type="text"
-                      className="form-control"
-                      placeholder="Nome da Automação"
-                      value={form.nome}
-                      onChange={handleAutoChange}
-                      required
-                    />
+                    <input id="nome" name="nome" type="text" className="form-control"
+                      placeholder="Nome da Automação" value={form.nome} onChange={handleAutoChange} required />
                     <label htmlFor="nome">Nome da Automação</label>
                   </div>
                 </div>
 
                 <div className="col-md-6">
                   <div className="form-floating">
-                    <select
-                      id="categoria"
-                      name="categoria"
-                      className="form-select"
-                      value={form.categoria}
-                      onChange={handleAutoChange}
-                      required
-                    >
+                    <select id="categoria" name="categoria" className="form-select"
+                      value={form.categoria} onChange={handleAutoChange} required>
                       <option value="" disabled>Selecione…</option>
                       <option value="AWS">AWS</option>
                       <option value="Low Code">Low Code</option>
@@ -553,16 +559,8 @@ export default function App() {
 
                 <div className="col-12">
                   <div className="form-floating">
-                    <textarea
-                      id="descricao"
-                      name="descricao"
-                      className="form-control"
-                      placeholder="Descrição da automação"
-                      style={{ minHeight: 120 }}
-                      value={form.descricao}
-                      onChange={handleAutoChange}
-                      required
-                    />
+                    <textarea id="descricao" name="descricao" className="form-control" placeholder="Descrição da automação"
+                      style={{ minHeight: 120 }} value={form.descricao} onChange={handleAutoChange} required />
                     <label htmlFor="descricao">Descrição da Automação</label>
                   </div>
                 </div>
@@ -598,15 +596,16 @@ export default function App() {
                     <i className="bi bi-save me-1" /> {editId ? 'Salvar alterações' : 'Salvar'}
                   </button>
                   {editId && (
-                    <button type="button" className="btn btn-outline-secondary" onClick={handleAutoCancel}>
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => {
+                      setEditId(null)
+                      setForm({ nome: '', descricao: '', categoria: '', ofertaBusca: '' })
+                    }}>
                       <i className="bi bi-x-circle me-1" /> Cancelar edição
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className="btn btn-light border"
-                    onClick={() => setForm({ nome: '', descricao: '', categoria: '', ofertaBusca: '' })}
-                  >
+                  <button type="button" className="btn btn-light border" onClick={() =>
+                    setForm({ nome: '', descricao: '', categoria: '', ofertaBusca: '' })
+                  }>
                     <i className="bi bi-eraser me-1" /> Limpar
                   </button>
                 </div>
@@ -619,7 +618,6 @@ export default function App() {
       {/* --------- AUTOMAÇÕES CADASTRADAS --------- */}
       <section className="container mb-5">
         <h2 className="h5 mb-2">Automações Cadastradas</h2>
-
         {automacoes.length === 0 ? (
           <p className="text-muted">Nenhum registro ainda. Preencha o formulário e clique em <em>Salvar</em>.</p>
         ) : (
@@ -679,7 +677,6 @@ function csvCell(val) {
   const s = String(val ?? '')
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
-
 /* ===== CSV helpers ===== */
 function parseCSV(text) {
   const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(l => l.trim().length)

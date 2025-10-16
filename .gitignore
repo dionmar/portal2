@@ -27,3 +27,21 @@ dist-ssr
 .amplify
 amplify_outputs*
 amplifyconfiguration*
+
+# node / build
+node_modules/
+dist/
+build/
+
+# env / editor
+.env
+.env.*
+.DS_Store
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Amplify sandbox state local (ok commitar amplify/ e amplify_outputs.json)
+amplify/#current-cloud-backend/
