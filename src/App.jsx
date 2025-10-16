@@ -407,9 +407,11 @@ export default function App() {
                     <select id="tier" name="tier" className="form-select"
                       value={ofertaForm.tier} onChange={handleOfertaChange} required>
                       <option value="" disabled>Selecione…</option>
-                      <option value="Bronze">Bronze</option>
-                      <option value="Silver">Silver</option>
-                      <option value="Gold">Gold</option>
+                      <option value="Tier 1">Bronze</option>
+                      <option value="Tier 2">Silver</option>
+                      <option value="Tier 3">Gold</option>
+                      <option value="Tier 4">Gold</option>
+                      <option value="Tier 5">Gold</option>
                     </select>
                     <label htmlFor="tier">Tier da Oferta</label>
                   </div>
@@ -420,9 +422,9 @@ export default function App() {
                     <select id="status" name="status" className="form-select"
                       value={ofertaForm.status} onChange={handleOfertaChange} required>
                       <option value="" disabled>Selecione…</option>
-                      <option value="Ativa">Ativa</option>
-                      <option value="Em Análise">Em Análise</option>
-                      <option value="Suspensa">Suspensa</option>
+                      <option value="Operacional">Operacional</option>
+                      <option value="Não Operacional">Não Operacional</option>
+                      <option value="Descontinuado">Descontinuado</option>
                     </select>
                     <label htmlFor="status">Status da Oferta</label>
                   </div>
