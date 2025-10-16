@@ -6,10 +6,36 @@ adding a new "isDone" field as a boolean. The authorization rule below
 specifies that any unauthenticated user can "create", "read", "update", 
 and "delete" any "Todo" records.
 =========================================================================*/
+// amplify/data/resource.ts
+/**
+ * Schema de dados: Oferta (1) --- (N) Automacao
+ * - ofertaId é opcional na Automacao (permite automações sem oferta vinculada)
+ * - relações: hasMany / belongsTo
+ * - auth: allow.guest() com identityPool (público). Ajuste depois conforme sua política.
+ */
+
 const schema = a.schema({
-  Todo: a
+  Oferta: a
     .model({
-      content: a.string(),
+      bsn: a.string().required(),
+      nome: a.string().required(),
+      tier: a.string().required(),
+      status: a.string().required(),
+      tipo: a.string().required(),
+      comunidade: a.string().required(),
+      criadoEm: a.datetime().required(),
+      automacoes: a.hasMany('Automacao', 'ofertaId'),
+    })
+    .authorization((allow) => [allow.guest()]),
+
+  Automacao: a
+    .model({
+      nome: a.string().required(),
+      descricao: a.string().required(),
+      categoria: a.string().required(),
+      criadoEm: a.datetime().required(),
+      ofertaId: a.id(), // FK opcional
+      oferta: a.belongsTo('Oferta', 'ofertaId'),
     })
     .authorization((allow) => [allow.guest()]),
 });
@@ -19,9 +45,12 @@ export type Schema = ClientSchema<typeof schema>;
 export const data = defineData({
   schema,
   authorizationModes: {
+    // Mantém o modo padrão como 'identityPool' (público/guest). 
+    // Depois você pode trocar para userPool e regras mais finas.
     defaultAuthorizationMode: 'identityPool',
   },
 });
+
 
 /*== STEP 2 ===============================================================
 Go to your frontend source code. From your client-side code, generate a
